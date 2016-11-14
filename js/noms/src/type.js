@@ -42,7 +42,12 @@ export class CompoundDesc {
   }
 
   hasUnresolvedCycle(visited: Type<any>[]): boolean {
-    return this.elemTypes.some(t => t.hasUnresolvedCycle(visited));
+    for (let i = 0; i < this.elemTypes.length; i++) {
+      if (this.elemTypes[i].hasUnresolvedCycle(visited)) {
+        return true;
+      }
+    }
+    return false;
   }
 }
 
@@ -69,7 +74,12 @@ export class StructDesc {
   }
 
   hasUnresolvedCycle(visited: Type<any>[]): boolean {
-    return this.fields.some(f => f.type.hasUnresolvedCycle(visited));
+    for (let i = 0; i < this.fields.length; i++) {
+      if (this.fields[i].type.hasUnresolvedCycle(visited)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   forEachField(cb: (name: string, type: Type<any>) => void) {
@@ -120,7 +130,7 @@ export class CycleDesc {
  */
 export class Type<T: TypeDesc> extends ValueBase {
   _desc: T;
-  _oid: ?Hash;
+  _oid: Hash | null;
   id: number;
   serialization: ?Uint8Array;
 
@@ -148,10 +158,6 @@ export class Type<T: TypeDesc> extends ValueBase {
     return this._desc;
   }
 
-  updateOID(o: Hash) {
-    this._oid = o;
-  }
-
   hasUnresolvedCycle(visited: Type<any>[]): boolean {
     if (visited.indexOf(this) >= 0) {
       return false;
@@ -173,6 +179,10 @@ export class Type<T: TypeDesc> extends ValueBase {
   describe(): string {
     return describeType(this);
   }
+}
+
+export function updateOID<T: TypeDesc>(t: Type<T>, o: Hash) {
+  t._oid = o;
 }
 
 function makePrimitiveType(k: NomsKind): Type<PrimitiveDesc> {

@@ -99,10 +99,10 @@ function deserializeHints(buff: Uint8Array): {hints: Array<Hash>, offset: number
 }
 
 export function deserializeChunks(buff: Uint8Array, offset: number = 0): Array<Chunk> {
-  const chunks:Array<Chunk> = [];
+  const chunks: Array<Chunk> = [];
 
   const totalLength = buff.byteLength;
-  for (; offset < totalLength;) {
+  while (offset < totalLength) {
     invariant(buff.byteLength - offset >= chunkHeaderSize, 'Invalid chunk buffer');
 
     // No need to copy the data out since we are not holding on to the hash object.

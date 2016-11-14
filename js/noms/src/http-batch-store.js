@@ -16,7 +16,7 @@ import {
   fetchText as fetchTextWithoutVersion,
 } from './fetch.js';
 import HttpError from './http-error.js';
-import {notNull} from './assert.js';
+import {invariant, notNull} from './assert.js';
 import nomsVersion from './version.js';
 
 export const DEFAULT_MAX_READS = 5;
@@ -113,8 +113,9 @@ export class Delegate {
     const chunks = deserializeChunks(buf);
 
     // Return success
-    chunks.forEach(chunk => {
-      const hashStr = chunk.hash.toString();
+    chunks.forEach((chunk, i) => {
+      const hashStr = hashStrs[i];
+      invariant(hashStr === chunk.hash.toString());
       reqs[hashStr](chunk);
       delete reqs[hashStr];
     });

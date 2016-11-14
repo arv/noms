@@ -10,12 +10,12 @@ import OrderedPutCache from './put-cache.js';
 import type {ChunkStream} from './chunk-serializer.js';
 import {notNull} from './assert.js';
 
-type PendingReadMap = { [key: string]: Promise<Chunk> };
-export type UnsentReadMap = { [key: string]: (c: Chunk) => void };
+type PendingReadMap = {[key: string]: Promise<Chunk>};
+export type UnsentReadMap = {[key: string]: (c: Chunk) => void};
 
 export type WriteRequest = {
-  hash: Hash;
-  hints: Set<Hash>;
+  hash: Hash,
+  hints: Set<Hash>,
 };
 
 interface Delegate {

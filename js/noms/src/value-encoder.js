@@ -55,7 +55,13 @@ export default class ValueEncoder {
       case Kind.Union:
         this.writeKind(k);
         this._w.writeUint32(t.elemTypes.length);
-        t.elemTypes.forEach(elemType => this.writeType(elemType, parentStructTypes));
+        for (let i = 0; i < t.elemTypes.length; i++) {
+          // Make sure the order of the union type is correct.
+          if (i > 0) {
+            invariant(t.elemTypes[i - 1].oidCompare(t.elemTypes[i]) < 0);
+          }
+          this.writeType(t.elemTypes[i], parentStructTypes);
+        }
         break;
       case Kind.Struct:
         this.writeStructType(t, parentStructTypes);
@@ -251,7 +257,13 @@ export default class ValueEncoder {
 
     this._w.writeUint32(desc.fieldCount);
 
+    let previous = '';
     desc.forEachField((name: string, type: Type<any>) => {
+      // Make sure the order of the fields is correct.
+      if (previous !== '') {
+        invariant(previous < name);
+        previous = name;
+      }
       this._w.writeString(name);
       this.writeType(type, parentStructTypes);
     });

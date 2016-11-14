@@ -7,7 +7,14 @@
 import Hash, {byteLength as hashByteLength} from './hash.js';
 import type {NomsKind} from './noms-kind.js';
 import {Kind} from './noms-kind.js';
-import {CompoundDesc, CycleDesc, PrimitiveDesc, StructDesc, Type} from './type.js';
+import {
+  CompoundDesc,
+  CycleDesc,
+  PrimitiveDesc,
+  StructDesc,
+  Type,
+  updateOID,
+} from './type.js';
 import {invariant, notNull} from './assert.js';
 import {alloc} from './bytes.js';
 import {BinaryWriter} from './binary-rw.js';
@@ -88,11 +95,16 @@ export default class TypeCache {
 
   makeStructType(name: string, fields: { [key: string]: Type<any> }): Type<StructDesc> {
     const fieldNames = Object.keys(fields).sort();
-    const fieldTypes = fieldNames.map(n => fields[n]);
-    return this.makeStructTypeQuickly(name, fieldNames, fieldTypes);
+    const {length} = fieldNames;
+    const fieldTypes = new Array(length);
+    for (let i = 0; i < length; i++) {
+      fieldTypes[i] = fields[fieldNames[i]];
+    }
+    return this.makeStructTypeQuickly(name, fieldNames, fieldTypes, true);
   }
 
-  makeStructTypeQuickly(name: string, fieldNames: Array<string>, fieldTypes: Array<Type<any>>)
+  makeStructTypeQuickly(name: string, fieldNames: Array<string>, fieldTypes: Array<Type<any>>,
+      normalizeType: boolean)
       : Type<StructDesc> {
     if (fieldNames.length !== fieldTypes.length) {
       throw new Error('Field names and types must be of equal length');
@@ -102,23 +114,27 @@ export default class TypeCache {
     verifyFieldNames(fieldNames);
 
     let trie = notNull(this.trieRoots.get(Kind.Struct)).traverse(this.identTable.getId(name));
-    fieldNames.forEach((fn, i) => {
+    const {length} = fieldNames;
+    // Don't use Array.prototype.forEach in hot code.
+    for (let i = 0; i < length; i++) {
+      const fn = fieldNames[i];
       const ft = fieldTypes[i];
       trie = trie.traverse(this.identTable.getId(fn));
       trie = trie.traverse(ft.id);
-    });
+    }
 
     if (trie.t === undefined) {
-      const fs = fieldNames.map((name, i) => {
-        const type = fieldTypes[i];
-        return {name, type};
-      });
+      // Don't use Array.prototype.map in hot code.
+      const fs = new Array(length);
+      for (let i = 0; i < length; i++) {
+        fs[i] = {name: fieldNames[i], type: fieldTypes[i]};
+      }
 
       let t = new Type(new StructDesc(name, fs), 0);
       if (t.hasUnresolvedCycle([])) {
         [t] = toUnresolvedType(t, this, -1, []);
         resolveStructCycles(t, []);
-        if (!t.hasUnresolvedCycle([])) {
+        if (normalizeType && !t.hasUnresolvedCycle([])) {
           normalize(t);
         }
       }
@@ -235,7 +251,7 @@ function resolveStructCycles(t: Type<any>, parentStructTypes: Type<any>[]): Type
 /**
  * We normalize structs during their construction iff they have no unresolved cycles. Normalizing
  * applies a canonical ordering to the composite types of a union (NB: this differs from the Go
- * implementation in that Go also serializes here, but in JS we do it lazily to avoid cylic
+ * implementation in that Go also serializes here, but in JS we do it lazily to avoid cyclic
  * dependencies). To ensure a consistent ordering of the composite types of a union, we generate
  * a unique "order id" or OID for each of those types. The OID is the hash of a unique type
  * encoding that is independant of the extant order of types within any subordinate unions. This
@@ -256,24 +272,28 @@ function resolveStructCycles(t: Type<any>, parentStructTypes: Type<any>[]): Type
  * comparison.
  */
 function normalize(t: Type<any>) {
-  walkType(t, [], (tt: Type<any>) => {
-    generateOID(tt, false);
-  });
+  walkType(t, [], normalizeToGenerateOID);
+  walkType(t, [], normalizeCheckInvariant);
+  walkType(t, [], normalizeSortUnions);
+}
 
-  walkType(t, [], (tt: Type<any>, parentStructTypes: Type<any>[]) => {
-    if (tt.kind === Kind.Struct) {
-      for (let i = 0; i < parentStructTypes.length; i++) {
-        invariant(tt.oidCompare(parentStructTypes[i]) !== 0,
-          'unrolled cycle types are not supported; ahl owes you a beer');
-      }
-    }
-  });
+function normalizeToGenerateOID(tt) {
+  generateOID(tt, false);
+}
 
-  walkType(t, [], (tt: Type<any>) => {
-    if (tt.kind === Kind.Union) {
-      tt.desc.elemTypes.sort((t1: Type<any>, t2: Type<any>): number => t1.oidCompare(t2));
+function normalizeCheckInvariant(tt: Type<any>, parentStructTypes: Type<any>[]) {
+  if (tt.kind === Kind.Struct) {
+    for (let i = 0; i < parentStructTypes.length; i++) {
+      invariant(tt.oidCompare(parentStructTypes[i]) !== 0,
+        'unrolled cycle types are not supported; ahl owes you a beer');
     }
-  });
+  }
+}
+
+function normalizeSortUnions(tt: Type<any>) {
+  if (tt.kind === Kind.Union) {
+    tt.desc.elemTypes.sort((t1: Type<any>, t2: Type<any>): number => t1.oidCompare(t2));
+  }
 }
 
 function walkType(t: Type<any>, parentStructTypes: Type<any>[],
@@ -291,15 +311,20 @@ function walkType(t: Type<any>, parentStructTypes: Type<any>[],
     }
   } else if (desc instanceof StructDesc) {
     parentStructTypes.push(t);
-    desc.forEachField((_: string, tt: Type<any>) => walkType(tt, parentStructTypes, cb));
+    const {fields} = desc;
+    for (let i = 0; i < fields.length; i++) {
+      walkType(fields[i].type, parentStructTypes, cb);
+    }
     parentStructTypes.pop(t);
   }
 }
 
 function generateOID(t: Type<any>, allowUnresolvedCycles: boolean) {
-  const buf = new BinaryWriter();
-  encodeForOID(t, buf, allowUnresolvedCycles, t, []);
-  t.updateOID(Hash.fromData(buf.data));
+  if (t._oid === null) {
+    const buf = new BinaryWriter();
+    encodeForOID(t, buf, allowUnresolvedCycles, t, []);
+    updateOID(t, Hash.fromData(buf.data));
+  }
 }
 
 function encodeForOID(t: Type<any>, buf: BinaryWriter, allowUnresolvedCycles: boolean,
@@ -390,11 +415,13 @@ function toUnresolvedType(t: Type<any>, tc: TypeCache, level: number,
   if (desc instanceof CompoundDesc) {
     let didChange = false;
     const elemTypes = desc.elemTypes;
-    const ts = elemTypes.map(t => {
+    const ts = new Array(elemTypes.length);
+    for (let i = 0; i < elemTypes.length; i++) {
+      const t = elemTypes[i];
       const [st, changed] = toUnresolvedType(t, tc, level, parentStructTypes);
       didChange = didChange || changed;
-      return st;
-    });
+      ts[i] = st;
+    }
     if (!didChange) {
       return [t, false];
     }
@@ -405,14 +432,16 @@ function toUnresolvedType(t: Type<any>, tc: TypeCache, level: number,
     let didChange = false;
     const fields = desc.fields;
     const outerType = t; // TODO: Stupid babel bug.
-    const fs = fields.map(f => {
+    const fs = new Array(fields.length);
+    for (let i = 0; i < fields.length; i++) {
+      const f = fields[i];
       const {name} = f;
       parentStructTypes.push(outerType);
       const [type, changed] = toUnresolvedType(f.type, tc, level + 1, parentStructTypes);
       parentStructTypes.pop();
       didChange = didChange || changed;
-      return {name, type};
-    });
+      fs[i] = {name, type};
+    }
     if (!didChange) {
       return [t, false];
     }
