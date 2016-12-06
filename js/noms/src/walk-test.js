@@ -11,17 +11,25 @@ import {BatchStoreAdaptor} from './batch-store.js';
 import {createStructClass} from './struct.js';
 import Database from './database.js';
 import {
+  blobType,
+  boolType,
+  makeCycleType,
   makeListType,
+  makeMapType,
+  makeRefType,
+  makeSetType,
   makeStructType,
+  makeUnionType,
   numberType,
   stringType,
+  typeType,
+  valueType,
 } from './type.js';
 import MemoryStore from './memory-store.js';
 import Blob from './blob.js';
 import List from './list.js';
 import Map from './map.js';
 import NomsSet from './set.js'; // namespace collision with JS Set
-import Struct from './struct.js';
 import walk from './walk.js';
 import type Value from './value.js';
 import {smallTestChunks, normalProductionChunks} from './rolling-value-hasher.js';
@@ -57,11 +65,51 @@ suite('walk', () => {
   });
 
   test('type', async () => {
-    const t = makeStructType('TestStruct', {
-      foo: stringType,
-    });
+    const assertVisitedOnce = async (root, v) => {
+      let count = 0;
+      await walk(root, ds, v2 => {
+        if (v === v2) {
+          count++;
+        }
+      });
+      assert.equal(1, count);
+    };
 
-    await callbackHappensOnce(t, ds, false);
+    const t = makeStructType('TestStruct', {
+      s: stringType,
+      b: boolType,
+      n: numberType,
+      bl: blobType,
+      t: typeType,
+      v: valueType,
+    });
+    await assertVisitedOnce(t, t);
+    await assertVisitedOnce(t, boolType);
+    await assertVisitedOnce(t, numberType);
+    await assertVisitedOnce(t, stringType);
+    await assertVisitedOnce(t, blobType);
+    await assertVisitedOnce(t, typeType);
+    await assertVisitedOnce(t, valueType);
+
+    for (const m of [makeListType, makeSetType, makeRefType]) {
+      const t2 = m(boolType);
+      await assertVisitedOnce(t2, t2);
+      await assertVisitedOnce(t2, boolType);
+    }
+
+    const t2 = makeMapType(numberType, stringType);
+    await assertVisitedOnce(t2, t2);
+    await assertVisitedOnce(t2, numberType);
+    await assertVisitedOnce(t2, stringType);
+
+    const t3 = makeUnionType([numberType, stringType, boolType]);
+    await assertVisitedOnce(t3, t3);
+    await assertVisitedOnce(t3, boolType);
+    await assertVisitedOnce(t3, numberType);
+    await assertVisitedOnce(t3, stringType);
+
+    const t4 = makeCycleType(11);
+    await assertVisitedOnce(t4, t4);
   });
 
   test('list', async () => {
@@ -176,7 +224,7 @@ suite('walk', () => {
 async function callbackHappensOnce(v: Value, ds: Database, skip: boolean): Promise<void> {
   // Test that our callback only gets called once.
   let count = 0;
-  await walk(v, ds, async cv => {
+  await walk(v, ds, cv => {
     assert.strictEqual(v, cv);
     count++;
     return skip;
