@@ -89,9 +89,21 @@ func (r *valueDecoder) readValueSequence() ValueSlice {
 	return data
 }
 
+func (r *valueDecoder) readLazyValueOffsets() []uint32 {
+	count := uint32(r.readCount())
+	offsets := make([]uint32, count)
+
+	for i := uint32(0); i < count; i++ {
+		offsets[i] = r.pos()
+		r.skipValue()
+	}
+
+	return offsets
+}
+
 func (r *valueDecoder) readListLeafSequence() sequence {
-	data := r.readValueSequence()
-	return listLeafSequence{leafSequence{r.vr, len(data), ListKind}, data}
+	offsets := r.readLazyValueOffsets()
+	return newListLazyLeafSequence(r.vr, offsets, r.nomsReader)
 }
 
 func (r *valueDecoder) readSetLeafSequence() orderedSequence {
@@ -130,6 +142,11 @@ func (r *valueDecoder) readMetaSequence(k NomsKind, level uint64) metaSequence {
 	}
 
 	return newMetaSequence(k, level, data, r.vr)
+}
+
+func (r *valueDecoder) skipValue() {
+	// TODO: This should not create the Value.
+	r.readValue()
 }
 
 func (r *valueDecoder) readValue() Value {

@@ -56,6 +56,7 @@ func DecodeValue(c chunks.Chunk, vr ValueReader) Value {
 
 type nomsReader interface {
 	pos() uint32
+	setPos(pos uint32)
 	readBytes() []byte
 	readUint8() uint8
 	readCount() uint64
@@ -82,6 +83,10 @@ type binaryNomsReader struct {
 
 func (b *binaryNomsReader) pos() uint32 {
 	return b.offset
+}
+
+func (b *binaryNomsReader) setPos(pos uint32) {
+	b.offset = pos
 }
 
 func (b *binaryNomsReader) readBytes() []byte {
@@ -146,9 +151,9 @@ func (b *binaryNomsWriter) data() []byte {
 	return b.buff[0:b.offset]
 }
 
-func (b *binaryNomsWriter) reset() {
-	b.offset = 0
-}
+// func (b *binaryNomsWriter) reset() {
+// 	b.offset = 0
+// }
 
 func (b *binaryNomsWriter) ensureCapacity(n uint32) {
 	length := uint32(len(b.buff))

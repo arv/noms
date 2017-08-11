@@ -25,6 +25,10 @@ func (r *nomsTestReader) pos() uint32 {
 	return uint32(r.i)
 }
 
+func (r *nomsTestReader) setPos(pos uint32) {
+	r.i = int(pos)
+}
+
 func (r *nomsTestReader) read() interface{} {
 	v := r.a[r.i]
 	r.i++

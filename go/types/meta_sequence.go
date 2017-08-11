@@ -194,6 +194,12 @@ func (ms metaSequence) getCompositeChildSequence(start uint64, length uint64) se
 			valueItems = append(valueItems, t.data...)
 		case listLeafSequence:
 			valueItems = append(valueItems, t.values...)
+		case listLazyLeafSequence:
+			// TODO: I need to understand when getCompositeChildSequence
+			// is used and see if we can somehow just keep the lazy sequence.
+			for i := 0; i < seq.seqLen(); i++ {
+				valueItems = append(valueItems, seq.getItem(i).(Value))
+			}
 		default:
 			panic("unreachable")
 		}

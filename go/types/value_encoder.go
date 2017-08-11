@@ -75,6 +75,17 @@ func (w *valueEncoder) writeListLeafSequence(seq listLeafSequence) {
 	w.writeValueSlice(seq.values)
 }
 
+func (w *valueEncoder) writeListLazyLeafSequence(seq listLazyLeafSequence) {
+	// TODO: The lazy sequence is already backed by raw bytes. We should be
+	// able to just write those to the output.
+	count := len(seq.offsets)
+	w.writeCount(uint64(count))
+
+	for i := 0; i < count; i++ {
+		w.writeValue(seq.getItem(i).(Value))
+	}
+}
+
 func (w *valueEncoder) writeSetLeafSequence(seq setLeafSequence) {
 	w.writeValueSlice(seq.data)
 }
@@ -143,7 +154,12 @@ func (w *valueEncoder) writeValue(v Value) {
 			return
 		}
 
-		w.writeListLeafSequence(seq.(listLeafSequence))
+		if seq, ok := seq.(listLeafSequence); ok {
+			w.writeListLeafSequence(seq)
+			return
+		}
+
+		w.writeListLazyLeafSequence(seq.(listLazyLeafSequence))
 	case MapKind:
 		seq := v.(Map).sequence()
 		if w.maybeWriteMetaSequence(seq) {
