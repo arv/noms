@@ -74,6 +74,10 @@ type nomsWriter interface {
 	writeBool(b bool)
 	writeString(v string)
 	writeHash(h hash.Hash)
+
+	// It is not clear if this is the right interface. In non tests we only ever work with binaryNomsReader which
+	// is backed by []byte.
+	writeRaw(r nomsReader, start, end uint32)
 }
 
 type binaryNomsReader struct {
@@ -222,4 +226,10 @@ func (b *binaryNomsWriter) writeHash(h hash.Hash) {
 	b.ensureCapacity(hash.ByteLen)
 	copy(b.buff[b.offset:], h[:])
 	b.offset += hash.ByteLen
+}
+
+func (b *binaryNomsWriter) writeRaw(r nomsReader, start, end uint32) {
+	b.ensureCapacity(end - start)
+	copy(b.buff[b.offset:], r.(*binaryNomsReader).buff[start:end])
+	b.offset += end - start
 }

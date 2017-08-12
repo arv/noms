@@ -103,6 +103,10 @@ func (w *nomsTestWriter) writeHash(h hash.Hash) {
 	w.writeString(h.String())
 }
 
+func (w *nomsTestWriter) writeRaw(reader nomsReader, start, end uint32) {
+	w.a = append(w.a, reader.(*nomsTestReader).a[start:end]...)
+}
+
 func assertEncoding(t *testing.T, expect []interface{}, v Value) {
 	vs := newTestValueStore()
 	tw := &nomsTestWriter{}

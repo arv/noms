@@ -7,11 +7,12 @@ package types
 type listLazyLeafSequence struct {
 	leafSequence
 	offsets []uint32
+	end     uint32
 	reader  nomsReader
 }
 
-func newListLazyLeafSequence(vr ValueReader, offsets []uint32, reader nomsReader) sequence {
-	return listLazyLeafSequence{leafSequence{vr, len(offsets), ListKind}, offsets, reader}
+func newListLazyLeafSequence(vr ValueReader, offsets []uint32, end uint32, reader nomsReader) sequence {
+	return listLazyLeafSequence{leafSequence{vr, len(offsets), ListKind}, offsets, end, reader}
 }
 
 // sequence interface

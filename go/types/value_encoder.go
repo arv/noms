@@ -81,8 +81,12 @@ func (w *valueEncoder) writeListLazyLeafSequence(seq listLazyLeafSequence) {
 	count := len(seq.offsets)
 	w.writeCount(uint64(count))
 
-	for i := 0; i < count; i++ {
-		w.writeValue(seq.getItem(i).(Value))
+	if r, ok := seq.reader.(*binaryNomsReader); ok {
+		w.writeRaw(r, seq.offsets[0], seq.end)
+	} else {
+		for i := 0; i < count; i++ {
+			w.writeValue(seq.getItem(i).(Value))
+		}
 	}
 }
 

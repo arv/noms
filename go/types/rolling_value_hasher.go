@@ -147,3 +147,8 @@ func (rv *rollingValueHasher) writeHash(h hash.Hash) {
 		rv.HashByte(b)
 	}
 }
+
+// TODO: Maybe make this []byte since it is only usefuel
+// func (rv *rollingValueHasher) writeRaw(r nomsReader, start, end uint32) {
+// 	panic("not implemented")
+// }

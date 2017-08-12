@@ -103,7 +103,7 @@ func (r *valueDecoder) readLazyValueOffsets() []uint32 {
 
 func (r *valueDecoder) readListLeafSequence() sequence {
 	offsets := r.readLazyValueOffsets()
-	return newListLazyLeafSequence(r.vr, offsets, r.nomsReader)
+	return newListLazyLeafSequence(r.vr, offsets, r.pos(), r.nomsReader)
 }
 
 func (r *valueDecoder) readSetLeafSequence() orderedSequence {
