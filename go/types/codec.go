@@ -64,6 +64,12 @@ type nomsReader interface {
 	readBool() bool
 	readString() string
 	readHash() hash.Hash
+
+	skipBool()
+	skipUint8()
+	skipBytes()
+	skipString()
+	skipHash()
 }
 
 type nomsWriter interface {
@@ -102,10 +108,19 @@ func (b *binaryNomsReader) readBytes() []byte {
 	return buff
 }
 
+func (b *binaryNomsReader) skipBytes() {
+	size := uint32(b.readCount())
+	b.offset += size
+}
+
 func (b *binaryNomsReader) readUint8() uint8 {
 	v := uint8(b.buff[b.offset])
 	b.offset++
 	return v
+}
+
+func (b *binaryNomsReader) skipUint8() {
+	b.offset++
 }
 
 func (b *binaryNomsReader) readCount() uint64 {
@@ -127,6 +142,10 @@ func (b *binaryNomsReader) readBool() bool {
 	return b.readUint8() == 1
 }
 
+func (b *binaryNomsReader) skipBool() {
+	b.skipUint8()
+}
+
 func (b *binaryNomsReader) readString() string {
 	size := uint32(b.readCount())
 
@@ -135,11 +154,20 @@ func (b *binaryNomsReader) readString() string {
 	return v
 }
 
+func (b *binaryNomsReader) skipString() {
+	size := uint32(b.readCount())
+	b.offset += size
+}
+
 func (b *binaryNomsReader) readHash() hash.Hash {
 	h := hash.Hash{}
 	copy(h[:], b.buff[b.offset:b.offset+hash.ByteLen])
 	b.offset += hash.ByteLen
 	return h
+}
+
+func (b *binaryNomsReader) skipHash() {
+	b.offset += hash.ByteLen
 }
 
 type binaryNomsWriter struct {

@@ -35,6 +35,10 @@ func (r *nomsTestReader) read() interface{} {
 	return v
 }
 
+func (r *nomsTestReader) skip() {
+	r.i++
+}
+
 func (r *nomsTestReader) atEnd() bool {
 	return r.i >= len(r.a)
 }
@@ -43,12 +47,24 @@ func (r *nomsTestReader) readString() string {
 	return r.read().(string)
 }
 
+func (r *nomsTestReader) skipString() {
+	r.skip()
+}
+
 func (r *nomsTestReader) readBool() bool {
 	return r.read().(bool)
 }
 
+func (r *nomsTestReader) skipBool() {
+	r.skip()
+}
+
 func (r *nomsTestReader) readUint8() uint8 {
 	return r.read().(uint8)
+}
+
+func (r *nomsTestReader) skipUint8() {
+	r.skip()
 }
 
 func (r *nomsTestReader) readCount() uint64 {
@@ -63,8 +79,16 @@ func (r *nomsTestReader) readBytes() []byte {
 	return r.read().([]byte)
 }
 
+func (r *nomsTestReader) skipBytes() {
+	r.skip()
+}
+
 func (r *nomsTestReader) readHash() hash.Hash {
 	return hash.Parse(r.readString())
+}
+
+func (r *nomsTestReader) skipHash() {
+	r.skipString()
 }
 
 type nomsTestWriter struct {

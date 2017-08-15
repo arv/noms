@@ -37,12 +37,26 @@ func (r *valueDecoder) readRef() Ref {
 	return constructRef(h, targetType, height)
 }
 
+func (r *valueDecoder) skipRef() {
+	r.skipHash()
+	r.skipType()
+	r.readCount()
+}
+
 func (r *valueDecoder) readType() *Type {
 	t := r.readTypeInner(map[string]*Type{})
 	if r.validating {
 		validateType(t)
 	}
 	return t
+}
+
+func (r *valueDecoder) skipType() {
+	if r.validating {
+		// Sorry, we have to create the type to validate it.
+		r.readType()
+	}
+	r.skipTypeInner()
 }
 
 func (r *valueDecoder) readTypeInner(seenStructs map[string]*Type) *Type {
@@ -72,9 +86,36 @@ func (r *valueDecoder) readTypeInner(seenStructs map[string]*Type) *Type {
 	return MakePrimitiveType(k)
 }
 
+func (r *valueDecoder) skipTypeInner() {
+	k := r.readKind()
+	switch k {
+	case ListKind:
+		r.skipTypeInner()
+	case MapKind:
+		r.skipTypeInner()
+		r.skipTypeInner()
+	case RefKind:
+		r.skipTypeInner()
+	case SetKind:
+		r.skipTypeInner()
+	case StructKind:
+		r.skipStructType()
+	case UnionKind:
+		r.skipUnionType()
+	case CycleKind:
+		r.skipString()
+	default:
+		d.PanicIfFalse(IsPrimitiveKind(k))
+	}
+}
+
 func (r *valueDecoder) readBlobLeafSequence() sequence {
 	b := r.readBytes()
 	return newBlobLeafSequence(r.vr, b)
+}
+
+func (r *valueDecoder) skipBlobLeafSequence() {
+	r.skipBytes()
 }
 
 func (r *valueDecoder) readValueSequence() ValueSlice {
@@ -87,6 +128,14 @@ func (r *valueDecoder) readValueSequence() ValueSlice {
 	}
 
 	return data
+}
+
+func (r *valueDecoder) skipValueSequence() {
+	count := uint32(r.readCount())
+
+	for i := uint32(0); i < count; i++ {
+		r.skipValue()
+	}
 }
 
 func (r *valueDecoder) readLazyValueOffsets() []uint32 {
@@ -106,9 +155,17 @@ func (r *valueDecoder) readListLeafSequence() sequence {
 	return newListLazyLeafSequence(r.vr, offsets, r.pos(), r.nomsReader)
 }
 
+func (r *valueDecoder) skipListLeafSequence() {
+	r.skipValueSequence()
+}
+
 func (r *valueDecoder) readSetLeafSequence() orderedSequence {
 	data := r.readValueSequence()
 	return setLeafSequence{leafSequence{r.vr, len(data), SetKind}, data}
+}
+
+func (r *valueDecoder) skipSetLeafSequence() {
+	r.skipValueSequence()
 }
 
 func (r *valueDecoder) readMapLeafSequence() orderedSequence {
@@ -121,6 +178,14 @@ func (r *valueDecoder) readMapLeafSequence() orderedSequence {
 	}
 
 	return mapLeafSequence{leafSequence{r.vr, len(data), MapKind}, data}
+}
+
+func (r *valueDecoder) skipMapLeafSequence() {
+	count := r.readCount()
+	for i := uint64(0); i < count; i++ {
+		r.skipValue()
+		r.skipValue()
+	}
 }
 
 func (r *valueDecoder) readMetaSequence(k NomsKind, level uint64) metaSequence {
@@ -144,9 +209,62 @@ func (r *valueDecoder) readMetaSequence(k NomsKind, level uint64) metaSequence {
 	return newMetaSequence(k, level, data, r.vr)
 }
 
+func (r *valueDecoder) skipMetaSequence(k NomsKind, level uint64) {
+	count := r.readCount()
+	for i := uint64(0); i < count; i++ {
+		r.skipValue() // ref
+		r.skipValue() // v
+	}
+}
+
 func (r *valueDecoder) skipValue() {
-	// TODO: This should not create the Value.
-	r.readValue()
+	k := r.readKind()
+	switch k {
+	case BlobKind:
+		level := r.readCount()
+		if level > 0 {
+			r.skipMetaSequence(k, level)
+		} else {
+			r.skipBlobLeafSequence()
+		}
+	case BoolKind:
+		r.readBool()
+	case NumberKind:
+		r.readNumber()
+	case StringKind:
+		r.skipString()
+	case ListKind:
+		level := r.readCount()
+		if level > 0 {
+			r.skipMetaSequence(k, level)
+		} else {
+			r.skipListLeafSequence()
+		}
+	case MapKind:
+		level := r.readCount()
+		if level > 0 {
+			r.skipMetaSequence(k, level)
+		} else {
+			r.skipMapLeafSequence()
+		}
+	case RefKind:
+		r.skipRef()
+	case SetKind:
+		level := r.readCount()
+		if level > 0 {
+			r.skipMetaSequence(k, level)
+		} else {
+			r.skipSetLeafSequence()
+		}
+	case StructKind:
+		r.skipStruct()
+	case TypeKind:
+		r.skipType()
+	case CycleKind, UnionKind, ValueKind:
+		d.Chk.Fail(fmt.Sprintf("A value instance can never have type %s", k))
+	default:
+		panic("not reachable")
+	}
 }
 
 func (r *valueDecoder) readValue() Value {
@@ -213,6 +331,16 @@ func (r *valueDecoder) readStruct() Value {
 	return Struct{name, fieldNames, values, &hash.Hash{}}
 }
 
+func (r *valueDecoder) skipStruct() {
+	r.skipString() // name
+	count := r.readCount()
+
+	for i := uint64(0); i < count; i++ {
+		r.skipString()
+		r.skipValue()
+	}
+}
+
 func boolToUint32(b bool) uint32 {
 	if b {
 		return 1
@@ -243,6 +371,21 @@ func (r *valueDecoder) readStructType(seenStructs map[string]*Type) *Type {
 	return t
 }
 
+func (r *valueDecoder) skipStructType() {
+	r.skipString() // name
+	count := r.readCount()
+
+	for i := uint64(0); i < count; i++ {
+		r.skipString() // field name
+	}
+	for i := uint64(0); i < count; i++ {
+		r.skipTypeInner()
+	}
+	for i := uint64(0); i < count; i++ {
+		r.readBool()
+	}
+}
+
 func (r *valueDecoder) readUnionType(seenStructs map[string]*Type) *Type {
 	l := r.readCount()
 	ts := make(typeSlice, l)
@@ -250,4 +393,11 @@ func (r *valueDecoder) readUnionType(seenStructs map[string]*Type) *Type {
 		ts[i] = r.readTypeInner(seenStructs)
 	}
 	return makeCompoundType(UnionKind, ts...)
+}
+
+func (r *valueDecoder) skipUnionType() {
+	l := r.readCount()
+	for i := uint64(0); i < l; i++ {
+		r.skipTypeInner()
+	}
 }
