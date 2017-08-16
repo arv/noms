@@ -147,3 +147,16 @@ func (rv *rollingValueHasher) writeHash(h hash.Hash) {
 		rv.HashByte(b)
 	}
 }
+
+func (rv *rollingValueHasher) reader() nomsReader {
+	panic("unreachable")
+}
+
+func (rv *rollingValueHasher) writeRaw(r nomsReader) {
+	rv.writeBytes(r.(*binaryNomsReader).buff)
+}
+
+func (rv *rollingValueHasher) canWriteRaw(r nomsReader) bool {
+	_, ok := r.(*binaryNomsReader)
+	return ok
+}
