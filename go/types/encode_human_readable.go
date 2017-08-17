@@ -172,27 +172,44 @@ func (w *hrsWriter) Write(v Value) {
 	}
 }
 
-func (w *hrsWriter) writeStruct(v Struct, printStructName bool) {
-	if printStructName {
-		w.write(v.name)
+type hrsStructWriter struct {
+	*hrsWriter
+	printStructName bool
+}
+
+func (w hrsStructWriter) name(n string) {
+	if w.printStructName {
+		w.write(n)
 		w.write(" ")
 	}
 	w.write("{")
 	w.indent()
+}
 
-	if len(v.fieldNames) > 0 {
+func (w hrsStructWriter) count(c uint64) {
+	if c > 0 {
 		w.newLine()
 	}
-	for i := 0; i < len(v.fieldNames); i++ {
-		w.write(v.fieldNames[i])
-		w.write(": ")
-		w.Write(v.values[i])
-		w.write(",")
-		w.newLine()
-	}
+}
 
+func (w hrsStructWriter) fieldName(n string) {
+	w.write(n)
+	w.write(": ")
+}
+
+func (w hrsStructWriter) fieldValue(v Value) {
+	w.Write(v)
+	w.write(",")
+	w.newLine()
+}
+
+func (w hrsStructWriter) end() {
 	w.outdent()
 	w.write("}")
+}
+
+func (w *hrsWriter) writeStruct(v Struct, printStructName bool) {
+	v.iterParts(hrsStructWriter{w, printStructName})
 }
 
 func (w *hrsWriter) WriteTagged(v Value) {
