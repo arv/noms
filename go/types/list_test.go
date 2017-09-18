@@ -1233,3 +1233,13 @@ func TestListOfListsDoesNotWriteRoots(t *testing.T) {
 	assert.Nil(vrw.ReadValue(l1.Hash()))
 	assert.Nil(vrw.ReadValue(l2.Hash()))
 }
+
+func TestListEditorEmpty(t *testing.T) {
+	vrw := newTestValueStore()
+
+	le := NewList(vrw).Edit()
+	le.Append(NewList(vrw).Edit())
+	l := le.List()
+
+	assert.True(t, l.Equals(NewList(vrw, NewList(vrw))), EncodedValue(l))
+}

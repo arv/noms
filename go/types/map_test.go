@@ -1668,3 +1668,13 @@ func TestNestedEditing(t *testing.T) {
 	mOut = me0.Map()
 	assert.True(t, mOut.Equals(NewMap(vrw))) // remove empty
 }
+
+func TestMapEditorEmpty(t *testing.T) {
+	vrw := newTestValueStore()
+
+	me := NewMap(vrw).Edit()
+	me.Set(String("abc"), NewMap(vrw).Edit())
+	m := me.Map()
+
+	assert.True(t, m.Equals(NewMap(vrw, String("abc"), NewMap(vrw))), EncodedValue(m))
+}
